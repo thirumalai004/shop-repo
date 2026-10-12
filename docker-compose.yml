@@ -1,0 +1,78 @@
+name: shop
+
+x-api-healthcheck: &api-healthcheck
+  test: ["CMD", "python", "-c",
+         "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=3)"]
+  interval: 5s
+  timeout: 5s
+  retries: 6
+  start_period: 5s
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [shop]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api-blue:
+    image: ${REGISTRY}/shop-api:${BLUE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+      COLOR: blue
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [shop]
+    healthcheck: *api-healthcheck
+
+  api-green:
+    image: ${REGISTRY}/shop-api:${GREEN_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+      COLOR: green
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [shop]
+    healthcheck: *api-healthcheck
+
+  worker:
+    image: ${REGISTRY}/shop-worker:${WORKER_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [shop]
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-8088}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # Single-file bind mount: switch.sh edits it in place (same inode) so nginx sees changes.
+      - ./nginx/active_upstream.conf:/etc/nginx/active_upstream.conf
+    depends_on:
+      - api-blue
+      - api-green
+    networks: [shop]
+
+volumes:
+  pgdata: {}
+
+networks:
+  shop:
+    driver: bridge

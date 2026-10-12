@@ -1,0 +1,7 @@
+.env
+.deploy.env
+deploy.log
+nginx/active_upstream.conf
+api/reports/
+__pycache__/
+.pytest_cache/

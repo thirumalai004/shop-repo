@@ -1,0 +1,42 @@
+# Throw-away stack for the Jenkins "Integration Tests" stage.
+# Needs env vars: REGISTRY, TAG  (exported by the Jenkinsfile)
+name: shop-itest
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: shop
+      POSTGRES_PASSWORD: itest
+      POSTGRES_DB: shop
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shop -d shop"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
+  api:
+    image: ${REGISTRY}/shop-api:${TAG}
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_USER: shop
+      POSTGRES_PASSWORD: itest
+      POSTGRES_DB: shop
+      COLOR: itest
+    depends_on:
+      db: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=3)"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
+  tests:
+    image: shop-api-test:${TAG}
+    command: ["pytest", "tests/integration", "-q", "-p", "no:cacheprovider"]
+    environment:
+      API_URL: http://api:5000
+      EXPECTED_VERSION: ${TAG}
+    depends_on:
+      api: { condition: service_healthy }

@@ -1,0 +1,27 @@
+# Jenkins controller + local image registry.
+# IMPORTANT: /var/jenkins_home is mounted at the SAME path on host and container so that
+# bind mounts used by "docker run -v $PWD/..." and "docker compose" resolve on the host daemon.
+name: shop-ci
+
+services:
+  registry:
+    image: registry:2
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - registry-data:/var/lib/registry
+
+  jenkins:
+    build: .
+    user: root
+    restart: unless-stopped
+    ports:
+      - "8081:8080"     # change if 8081 is also taken
+      - "50000:50000"
+    volumes:
+      - /var/jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  registry-data: {}
