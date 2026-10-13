@@ -44,19 +44,30 @@ pipeline {
         }
 
         stage('Unit Tests') {
-    steps {
-        sh 'rm -rf api/reports'
-        sh 'mkdir -p api/reports'
-        sh "docker run --rm -v ${WORKSPACE}/api/reports:/app/reports shop-api-test:${env.TAG} pytest tests/unit --junitxml=reports/report.xml --cov=app --cov-report=xml:reports/coverage.xml --cov-report=term"
-        sh 'chmod -R 777 api/reports'
-    }
-    post {
-        always {
-            junit 'api/reports/report.xml'
-            archiveArtifacts artifacts: 'api/reports/coverage.xml', allowEmptyArchive: true
+            steps {
+                sh 'rm -rf api/reports'
+                sh 'mkdir -p api/reports'
+                sh "docker run --rm -v ${WORKSPACE}/api/reports:/app/reports shop-api-test:${env.TAG} pytest tests/unit --junitxml=reports/report.xml --cov=app --cov-report=xml:reports/coverage.xml --cov-report=term"
+                sh 'chmod -R 777 api/reports'
+            }
+            post {
+                always {
+                    script {
+                        def reportFile = "api/reports/report.xml"
+                        if (fileExists(reportFile)) {
+                            junit reportFile
+                        } else {
+                            echo "Warning: JUnit report file not found at ${reportFile}"
+                        }
+                        
+                        def coverageFile = "api/reports/coverage.xml"
+                        if (fileExists(coverageFile)) {
+                            archiveArtifacts artifacts: coverageFile, allowEmptyArchive: true
+                        }
+                    }
+                }
+            }
         }
-    }
-}
 
         stage('Build Images') {
             steps {
@@ -68,7 +79,6 @@ pipeline {
         stage('Integration Tests') {
             steps {
                 script {
-                    // Fix potential CLI plugin permission issues on Jenkins agents
                     sh 'chmod +x /usr/local/lib/docker/cli-plugins/docker-compose || true'
                 }
                 sh "docker compose -f docker-compose.test.yml up --abort-on-container-exit --exit-code-from tests"
