@@ -77,19 +77,19 @@ pipeline {
         }
 
         stage('Integration Tests') {
-            steps {
-                script {
-                    sh 'chmod +x /usr/local/lib/docker/cli-plugins/docker-compose || true'
-                }
-                sh "docker compose -f docker-compose.test.yml up --abort-on-container-exit --exit-code-from tests"
-            }
-            post {
-                always {
-                    sh "docker compose -f docker-compose.test.yml down -v --remove-orphans || true"
-                }
-            }
+          steps {
+          script {
+            // Remove the corrupted CLI plugin so docker falls back or avoids segfaults
+            sh 'rm -f /usr/local/lib/docker/cli-plugins/docker-compose || true'
+        }
+        sh "docker compose -f docker-compose.test.yml up --abort-on-container-exit --exit-code-from tests"
+    }
+    post {
+        always {
+            sh "docker compose -f docker-compose.test.yml down -v --remove-orphans || true"
         }
     }
+}
 
     post {
         failure {
